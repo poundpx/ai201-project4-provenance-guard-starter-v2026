@@ -46,6 +46,12 @@ DETECTOR_MODEL = os.getenv("AI201_DETECTOR_MODEL", "gpt2")
 # 300 words, which is enough for the signal to mean something.
 DETECTOR_MAX_TOKENS = 400
 
+# Anything longer than this is scored but sent to `under_review` instead of
+# getting a confident label (criterion 4). The detector only reads the first
+# ~300 words, so on a very long submission most of the text is never scored at
+# all — and anything past the truncation point can hide whatever it likes.
+MAX_SCORABLE_WORDS = 5000
+
 
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.

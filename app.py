@@ -30,6 +30,7 @@ from flask import Flask, jsonify, request
 
 import audit
 import config
+import detector
 
 app = Flask(__name__)
 
@@ -200,16 +201,56 @@ def submit():
     a malformed input is one of the most common real failures there is.
     """
     payload = request.get_json(silent=True) or {}
+    text = payload.get("text")
+    creator_id = payload.get("creator_id", "unknown")
 
-    # TODO: delete this and build the route.
+    # Criterion 4. Missing and empty text are refused and recorded. From in
+    # here a writer's mistake, a bug in the site and a broken network all look
+    # the same, so the only honest answer is to say what was wrong and log it.
+    if text is None:
+        audit.log_rejection(creator_id, "missing_text")
+        return jsonify({
+            "error": "missing_text",
+            "message": "No text was sent.",
+        }), 400
+
+    if not text.strip():
+        audit.log_rejection(creator_id, "empty_text")
+        return jsonify({
+            "error": "empty_text",
+            "message": "The text was empty.",
+        }), 400
+
+    content_id = str(uuid.uuid4())
+    word_count = len(text.split())
+    model_score = detector.model_signal(text)
+
+    # Criterion 4. Longer than the detector can read, so it gets scored but
+    # not labelled — a confident verdict on 300 of 10,000 words is a guess
+    # wearing a number.
+    status = "under_review" if word_count > config.MAX_SCORABLE_WORDS else "decided"
+
+    # Milestone 4 fills in style_score and combined_score; Milestone 5 the
+    # guess and the label. They are logged as None now so the entry already
+    # has all nine fields.
+    audit.log_decision(
+        content_id=content_id,
+        creator_id=creator_id,
+        model_score=model_score,
+        status=status,
+        word_count=word_count,
+    )
+
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /submit isn't built yet — see the TODO in app.py.",
-        "you_sent": {
-            "text_length": len(payload.get("text", "")),
-            "creator_id": payload.get("creator_id"),
-        },
-    }), 501
+        "content_id": content_id,
+        "guess": None,
+        "confidence": None,
+        "label": None,
+        "model_score": model_score,
+        "style_score": None,
+        "status": status,
+        "word_count": word_count,
+    })
 
 
 @app.post("/appeal")

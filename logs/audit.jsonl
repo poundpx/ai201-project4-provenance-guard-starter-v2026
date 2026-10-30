@@ -1,0 +1,4 @@
+{"timestamp": "2026-10-30T19:47:01+00:00", "content_id": "1243288d-5736-4e75-a12e-d4170663f492", "creator_id": "writer_01", "guess": null, "model_score": 0.7451, "style_score": null, "combined_score": null, "label": null, "status": "decided", "word_count": 23}
+{"timestamp": "2026-10-30T19:47:01+00:00", "creator_id": "writer_02", "event": "rejected", "status": "rejected", "reason": "empty_text"}
+{"timestamp": "2026-10-30T19:47:01+00:00", "creator_id": "writer_03", "event": "rejected", "status": "rejected", "reason": "missing_text"}
+{"timestamp": "2026-10-30T19:47:12+00:00", "content_id": "d6c8d7ac-2a66-4a1a-9447-faa2371dca3b", "creator_id": "writer_04", "guess": null, "model_score": 0.9972, "style_score": null, "combined_score": null, "label": null, "status": "under_review", "word_count": 6300}
