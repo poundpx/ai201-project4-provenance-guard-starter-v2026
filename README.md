@@ -211,14 +211,52 @@ attack set to do.
 
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00 – 0.35 | We think this was probably written by a person. |
+| unsure | 0.35 – 0.70 | We couldn't tell whether this was written by a person or with the help of AI. That isn't a judgment about you or your work, and you don't need to do anything. If you'd like someone to take a look anyway, you can ask. |
+| high-confidence AI | 0.70 – 1.00 | This may have been written with the help of AI. Checks like this one can be wrong, and we haven't decided anything about your work. If you wrote it yourself, tell us and a person will take a look. |
+
+The ranges come from `HUMAN_THRESHOLD` and `AI_THRESHOLD` in `config.py`, and
+`scoring.label_ranges()` prints them. All three are reachable — the Sample Run
+below shows a real submission producing each one.
+
+**Where I put the AI line, and what it costs.** I moved `AI_THRESHOLD` from the
+starter's 0.65 to 0.70. On my 19 test texts that catches all 7 AI pieces and
+falsely accuses 1 of 12 human pieces — the Treaty of Versailles paragraph,
+which scores 0.81 because formal prose reads as machine-like to both signals.
+Raising the line to 0.85 removes that false positive but drops AI caught from
+7 to 1, which is not a detector any site would run. Nothing in between helps:
+between 0.70 and 0.85 the same essay is still accused and fewer AI pieces are
+caught, so 0.75 and 0.80 are strictly worse than 0.70.
+
+⚠️ **This misses my own criterion 1**, which allows at most 1 false positive in
+20. One in 12 is worse than that. I am leaving both the criterion and the
+threshold where they are: the criterion is the standard I set before I could
+see the answer, and lowering it now would just be marking my own homework. The
+miss, and why these two signals can't meet it, is the thing to diagnose in
+unit 8.
 
 **Why I worded the "unsure" one this way:**
 <!-- It's the hardest of the three. It has to admit uncertainty without
      sounding like an accusation, because the person reading it may well have
      written every word themselves. -->
+
+Two thirds of my test texts land in the unsure band, so this is the label most
+writers will actually see — including every formal human writer except the one
+I falsely accuse. So it had to do three things at once: admit the system
+doesn't know, say plainly that this is not an accusation, and not demand
+anything of someone who has done nothing wrong. Hence "that isn't a judgment
+about you or your work, and you don't need to do anything."
+
+The appeal is offered last and framed as optional ("if you'd like"), because a
+label that ends by telling an innocent writer to defend themselves has made an
+accusation whatever its wording says. The AI label words it the other way round
+— "tell us and a person will take a look" — because there the writer does need
+to know the route exists. My criterion 1 says the appeal only helps people who
+actually use it, so on the one label that can wrongly accuse someone, the way
+out is stated as a plain invitation rather than buried.
+
+I deliberately kept the score out of all three. "0.62" tells a writer nothing
+and invites them to argue with a number instead of telling us what they know.
 
 
 
@@ -297,8 +335,9 @@ $ curl.exe -X POST http://127.0.0.1:5000/ping -H "Content-Type: application/json
 }
 ```
 
-A real submission (Milestone 3: only signal one is wired in, so `style_score`,
-`confidence`, `guess` and `label` are still `null`):
+A real submission, taken during Milestone 3 when only signal one was wired in,
+so `style_score`, `confidence`, `guess` and `label` are still `null`. The
+finished version of this route is further down, under **The finished route**:
 
 ```bash
 $ curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" -d '{\"text\": \"I missed the bus again this morning, so I walked, and honestly the rain was kind of nice.\", \"creator_id\": \"writer_01\"}'
@@ -343,16 +382,93 @@ $ curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/js
 }
 ```
 
-**An appeal**
+**The finished route — all three labels**
+
+The same endpoint after Milestone 5, with both signals and a real label. These
+three submissions produce the three different labels, which is how I checked
+every one is reachable.
+
+High-confidence AI (a chatbot-style paragraph about exercise):
 
 ```bash
-$ curl -X POST http://127.0.0.1:5000/appeal \
-  -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+$ curl -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" -d '{"text": "Regular exercise offers a wide range of benefits for physical and mental well-being. It strengthens the heart, improves mood, and helps maintain a healthy weight. Experts recommend at least thirty minutes of moderate activity on most days of the week. Making exercise a consistent habit can greatly enhance overall quality of life.", "creator_id": "writer_05"}'
 ```
 
 ```json
+{
+  "confidence": 0.8509,
+  "content_id": "20230bf6-9d75-4b81-b89e-97d0ed568a65",
+  "guess": "ai",
+  "label": "This may have been written with the help of AI. Checks like this one can be wrong, and we haven't decided anything about your work. If you wrote it yourself, tell us and a person will take a look.",
+  "model_score": 0.8648,
+  "status": "decided",
+  "style_score": 0.8184,
+  "word_count": 52
+}
+```
 
+High-confidence human (an informal story) scored `confidence` 0.3306, `guess`
+"human". Unsure (a formal paragraph of literary criticism) scored 0.5495,
+`guess` "unsure". A submission over 5,000 words is labelled unsure and set to
+`under_review` whatever it scores, because the detector only reads the first
+~300 words.
+
+**An appeal**
+
+The writer above says the label is wrong. I used the `content_id` from that
+response:
+
+```bash
+$ curl -X POST http://127.0.0.1:5000/appeal -H "Content-Type: application/json" -d '{"content_id": "20230bf6-9d75-4b81-b89e-97d0ed568a65", "reasoning": "I wrote this myself for a health class assignment. I write in a plain style because English is my second language."}'
+```
+
+```json
+{
+  "content_id": "20230bf6-9d75-4b81-b89e-97d0ed568a65",
+  "message": "Thanks. Your appeal is recorded and a person will take a look.",
+  "status": "under_review"
+}
+```
+
+An appeal naming a `content_id` that doesn't exist returns 404
+`unknown_content_id` rather than quietly succeeding (criterion 3). A missing
+`content_id` or missing `reasoning` each return 400.
+
+**The log after that appeal**
+
+The original decision is untouched and the appeal sits after it, so the order
+of events is readable later:
+
+```bash
+$ curl "http://127.0.0.1:5000/log?limit=2"
+```
+
+```json
+{
+  "count": 2,
+  "entries": [
+    {
+      "combined_score": 0.8509,
+      "content_id": "20230bf6-9d75-4b81-b89e-97d0ed568a65",
+      "creator_id": "writer_05",
+      "guess": "ai",
+      "label": "This may have been written with the help of AI. Checks like this one can be wrong, and we haven't decided anything about your work. If you wrote it yourself, tell us and a person will take a look.",
+      "model_score": 0.8648,
+      "status": "decided",
+      "style_score": 0.8184,
+      "timestamp": "2026-10-31T13:59:05+00:00",
+      "word_count": 52
+    },
+    {
+      "content_id": "20230bf6-9d75-4b81-b89e-97d0ed568a65",
+      "creator_id": "writer_05",
+      "event": "appeal",
+      "reasoning": "I wrote this myself for a health class assignment. I write in a plain style because English is my second language.",
+      "status": "under_review",
+      "timestamp": "2026-10-31T13:59:09+00:00"
+    }
+  ]
+}
 ```
 
 **What the log shows afterwards**

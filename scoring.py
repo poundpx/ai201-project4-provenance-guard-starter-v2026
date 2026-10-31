@@ -62,10 +62,27 @@ def combine_signals(model_score: float, style_score: float) -> float:
     return round(average, 4)
 
 
+# The words a writer actually sees. Written for someone who has never heard of
+# a threshold: no scores, no jargon, and the two that could land on a real
+# writer both say a person can take a second look.
+LABEL_HUMAN = "We think this was probably written by a person."
+
+LABEL_UNSURE = (
+    "We couldn't tell whether this was written by a person or with the help "
+    "of AI. That isn't a judgment about you or your work, and you don't need "
+    "to do anything. If you'd like someone to take a look anyway, you can ask."
+)
+
+LABEL_AI = (
+    "This may have been written with the help of AI. Checks like this one "
+    "can be wrong, and we haven't decided anything about your work. If you "
+    "wrote it yourself, tell us and a person will take a look."
+)
+
+
 def score_to_label(score: float) -> tuple[str, str]:
     """
     Turn a score into a guess and the text a reader actually sees.
-    ← TODO (Milestone 5)
 
     Returns:
         (guess, label_text) — where `guess` is a short machine-readable string
@@ -88,12 +105,11 @@ def score_to_label(score: float) -> tuple[str, str]:
     think if they got it on their own work. That question is the whole
     milestone.
     """
-    # TODO: replace this — thresholds are in config.py
-    if score >= config.AI_THRESHOLD:
-        return "ai", "PLACEHOLDER — write the high-confidence AI label."
-    if score <= config.HUMAN_THRESHOLD:
-        return "human", "PLACEHOLDER — write the high-confidence human label."
-    return "unsure", "PLACEHOLDER — write the unsure label."
+    if score > config.AI_THRESHOLD:
+        return "ai", LABEL_AI
+    if score < config.HUMAN_THRESHOLD:
+        return "human", LABEL_HUMAN
+    return "unsure", LABEL_UNSURE
 
 
 def label_ranges() -> list[tuple[str, str]]:

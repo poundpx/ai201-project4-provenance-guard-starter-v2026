@@ -248,26 +248,31 @@ def submit():
     # Criterion 4. Longer than the detector can read, so it gets scored but
     # not labelled — a confident verdict on 300 of 10,000 words is a guess
     # wearing a number.
-    status = "under_review" if word_count > config.MAX_SCORABLE_WORDS else "decided"
+    too_long = word_count > config.MAX_SCORABLE_WORDS
+    status = "under_review" if too_long else "decided"
 
-    # Milestone 4 fills in style_score and combined_score; Milestone 5 the
-    # guess and the label. They are logged as None now so the entry already
-    # has all nine fields.
+    if too_long:
+        guess, label = "unsure", scoring.LABEL_UNSURE
+    else:
+        guess, label = scoring.score_to_label(combined)
+
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
+        guess=guess,
         model_score=model_score,
         style_score=style_score,
         combined_score=combined,
+        label=label,
         status=status,
         word_count=word_count,
     )
 
     return jsonify({
         "content_id": content_id,
-        "guess": None,
+        "guess": guess,
         "confidence": combined,
-        "label": None,
+        "label": label,
         "model_score": model_score,
         "style_score": style_score,
         "status": status,
@@ -278,7 +283,7 @@ def submit():
 @app.post("/appeal")
 def appeal():
     """
-    A writer says you got it wrong. ← TODO — Milestone 5
+    A writer says you got it wrong.
 
     Expects JSON:
         {"content_id": "...", "reasoning": "..."}
@@ -295,14 +300,44 @@ def appeal():
     to the person on the other end. It's the only thing standing between a
     wrong accusation and nothing at all.
     """
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
+    content_id = payload.get("content_id")
+    reasoning = payload.get("reasoning")
 
-    # TODO: delete this and build the route.
+    if not isinstance(content_id, str) or not content_id.strip():
+        return jsonify({
+            "error": "missing_content_id",
+            "message": "Say which piece of writing you are appealing.",
+        }), 400
+
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return jsonify({
+            "error": "missing_reasoning",
+            "message": "Tell us why you think this was wrong.",
+        }), 400
+
+    # A typo'd id must fail loudly. Quietly "succeeding" would leave a writer
+    # believing a person will look at their work when nobody will.
+    original = [e for e in audit.entries_for(content_id) if e.get("event") != "appeal"]
+    if not original:
+        return jsonify({
+            "error": "unknown_content_id",
+            "message": "We couldn't find that submission. Check the id and try again.",
+        }), 404
+
+    audit.log_appeal(
+        content_id=content_id,
+        creator_id=original[0].get("creator_id", "unknown"),
+        reasoning=reasoning.strip(),
+    )
+
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /appeal isn't built yet — see the TODO in app.py.",
-        "you_sent": payload,
-    }), 501
+        "content_id": content_id,
+        "status": "under_review",
+        "message": "Thanks. Your appeal is recorded and a person will take a look.",
+    })
 
 
 # ── Already works ─────────────────────────────────────────────────────────────
