@@ -2,3 +2,6 @@
 {"timestamp": "2026-10-30T19:47:01+00:00", "creator_id": "writer_02", "event": "rejected", "status": "rejected", "reason": "empty_text"}
 {"timestamp": "2026-10-30T19:47:01+00:00", "creator_id": "writer_03", "event": "rejected", "status": "rejected", "reason": "missing_text"}
 {"timestamp": "2026-10-30T19:47:12+00:00", "content_id": "d6c8d7ac-2a66-4a1a-9447-faa2371dca3b", "creator_id": "writer_04", "guess": null, "model_score": 0.9972, "style_score": null, "combined_score": null, "label": null, "status": "under_review", "word_count": 6300}
+{"timestamp": "2026-10-31T13:09:06+00:00", "content_id": "cca4bb93-52be-412d-aad5-41cc13b0bbcb", "creator_id": "writer_01", "guess": null, "model_score": 0.4731, "style_score": null, "combined_score": null, "label": null, "status": "decided", "word_count": 18}
+{"timestamp": "2026-10-31T13:09:20+00:00", "creator_id": "writer_03", "event": "rejected", "status": "rejected", "reason": "missing_text"}
+{"timestamp": "2026-10-31T13:09:26+00:00", "creator_id": "writer_02", "event": "rejected", "status": "rejected", "reason": "empty_text"}

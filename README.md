@@ -139,6 +139,53 @@ An English learner writes a plain, careful poem. Both signals read it as AI-like
 <!-- One submission and one appeal, pasted as text: the request, the response,
      and the log entries. -->
 
+**Signal one on its own (Milestone 3)**
+
+I ran `detector.py` on three pieces before wiring it into the route.
+
+Clearly AI (a polished chatbot-style paragraph):
+
+```
+$ python detector.py "Artificial intelligence has the potential to transform many industries by improving efficiency, reducing costs, and enabling better decision-making. However, it is important to consider the ethical implications and ensure that these technologies are developed and used responsibly."
+perplexity     11.7
+model_signal   0.8955   (higher = more likely AI)
+```
+
+In between:
+
+```
+$ python detector.py "Hello world, i am come to smash you into pieces. Although i love you very much i cannot afford to have you in my way anymore"
+perplexity     38.4
+model_signal   0.5628   (higher = more likely AI)
+```
+
+Clearly human (informal, with grammar slips):
+
+```
+$ python detector.py "If the sky is yellow it mean theres a storm coming"
+perplexity     126.5
+model_signal   0.1606   (higher = more likely AI)
+```
+
+The signal separates them: 0.8955, 0.5628 and 0.1606 are well apart.
+
+One blind spot showed up. Removing a single comma changed the score a lot, so
+punctuation and grammar errors move it as much as who wrote the text:
+
+```
+$ python detector.py "Rose are red, violet are blue"
+perplexity     212.3
+model_signal   0.0771
+
+$ python detector.py "Rose are red violet are blue"
+perplexity     1534.7
+model_signal   0.0035
+```
+
+Ungrammatical text surprises GPT-2, so it reads as "human" even though nothing
+about who wrote it changed. Someone could add typos to AI text to fake this.
+Very short inputs ("Hello, world" scores 0.0993) are also too noisy to trust.
+
 **A submission**
 
 <!-- The response needs content_id, guess, confidence, label, AND both
@@ -146,14 +193,64 @@ An English learner writes a plain, careful poem. Both signals read it as AI-like
      two off the response, so leaving them out costs you next unit's
      diagnostics. -->
 
+Control check, `/ping` still answers:
+
 ```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
-  -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+$ curl.exe -X POST http://127.0.0.1:5000/ping -H "Content-Type: application/json" -d '{\"message\": \"hello\"}'
 ```
 
 ```json
+{
+  "ok": true,
+  "service": "provenance-guard",
+  "you_sent": "hello"
+}
+```
 
+A real submission (Milestone 3: only signal one is wired in, so `style_score`,
+`confidence`, `guess` and `label` are still `null`):
+
+```bash
+$ curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" -d '{\"text\": \"I missed the bus again this morning, so I walked, and honestly the rain was kind of nice.\", \"creator_id\": \"writer_01\"}'
+```
+
+```json
+{
+  "confidence": null,
+  "content_id": "cca4bb93-52be-412d-aad5-41cc13b0bbcb",
+  "guess": null,
+  "label": null,
+  "model_score": 0.4731,
+  "status": "decided",
+  "style_score": null,
+  "word_count": 18
+}
+```
+
+Missing text:
+
+```bash
+$ curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" -d '{\"creator_id\": \"writer_03\"}'
+```
+
+```json
+{
+  "error": "missing_text",
+  "message": "No text was sent."
+}
+```
+
+Empty text:
+
+```bash
+$ curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" -d '{\"text\": \"   \", \"creator_id\": \"writer_02\"}'
+```
+
+```json
+{
+  "error": "empty_text",
+  "message": "The text was empty."
+}
 ```
 
 **An appeal**
@@ -171,12 +268,64 @@ $ curl -X POST http://127.0.0.1:5000/appeal \
 **What the log shows afterwards**
 
 ```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+$ curl.exe "http://127.0.0.1:5000/log?limit=5"
 ```
 
 ```json
-
+{
+  "count": 5,
+  "entries": [
+    {
+      "creator_id": "writer_03",
+      "event": "rejected",
+      "reason": "missing_text",
+      "status": "rejected",
+      "timestamp": "2026-10-30T19:47:01+00:00"
+    },
+    {
+      "combined_score": null,
+      "content_id": "d6c8d7ac-2a66-4a1a-9447-faa2371dca3b",
+      "creator_id": "writer_04",
+      "guess": null,
+      "label": null,
+      "model_score": 0.9972,
+      "status": "under_review",
+      "style_score": null,
+      "timestamp": "2026-10-30T19:47:12+00:00",
+      "word_count": 6300
+    },
+    {
+      "combined_score": null,
+      "content_id": "cca4bb93-52be-412d-aad5-41cc13b0bbcb",
+      "creator_id": "writer_01",
+      "guess": null,
+      "label": null,
+      "model_score": 0.4731,
+      "status": "decided",
+      "style_score": null,
+      "timestamp": "2026-10-31T13:09:06+00:00",
+      "word_count": 18
+    },
+    {
+      "creator_id": "writer_03",
+      "event": "rejected",
+      "reason": "missing_text",
+      "status": "rejected",
+      "timestamp": "2026-10-31T13:09:20+00:00"
+    },
+    {
+      "creator_id": "writer_02",
+      "event": "rejected",
+      "reason": "empty_text",
+      "status": "rejected",
+      "timestamp": "2026-10-31T13:09:26+00:00"
+    }
+  ]
+}
 ```
+
+The 6,300-word entry (`writer_04`) was scored and logged as `under_review`
+rather than `decided`, as criterion 4 says.
 
 ---
 
