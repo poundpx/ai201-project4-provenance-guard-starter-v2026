@@ -31,6 +31,8 @@ from flask import Flask, jsonify, request
 import audit
 import config
 import detector
+import scoring
+import stylometry
 
 app = Flask(__name__)
 
@@ -200,7 +202,9 @@ def submit():
     what should this do when `text` is missing, empty, or enormous? A crash on
     a malformed input is one of the most common real failures there is.
     """
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
     text = payload.get("text")
     creator_id = payload.get("creator_id", "unknown")
 
@@ -214,6 +218,13 @@ def submit():
             "message": "No text was sent.",
         }), 400
 
+    if not isinstance(text, str):
+        audit.log_rejection(creator_id, "invalid_text")
+        return jsonify({
+            "error": "invalid_text",
+            "message": "The text must be a string.",
+        }), 400
+
     if not text.strip():
         audit.log_rejection(creator_id, "empty_text")
         return jsonify({
@@ -223,7 +234,16 @@ def submit():
 
     content_id = str(uuid.uuid4())
     word_count = len(text.split())
-    model_score = detector.model_signal(text)
+    try:
+        model_score = detector.model_signal(text)
+    except ValueError:
+        audit.log_rejection(creator_id, "text_too_short")
+        return jsonify({
+            "error": "text_too_short",
+            "message": "That text is too short to check. Send a few sentences.",
+        }), 400
+    style_score = stylometry.style_signal(text)
+    combined = scoring.combine_signals(model_score, style_score)
 
     # Criterion 4. Longer than the detector can read, so it gets scored but
     # not labelled — a confident verdict on 300 of 10,000 words is a guess
@@ -237,6 +257,8 @@ def submit():
         content_id=content_id,
         creator_id=creator_id,
         model_score=model_score,
+        style_score=style_score,
+        combined_score=combined,
         status=status,
         word_count=word_count,
     )
@@ -244,10 +266,10 @@ def submit():
     return jsonify({
         "content_id": content_id,
         "guess": None,
-        "confidence": None,
+        "confidence": combined,
         "label": None,
         "model_score": model_score,
-        "style_score": None,
+        "style_score": style_score,
         "status": status,
         "word_count": word_count,
     })

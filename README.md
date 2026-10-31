@@ -97,9 +97,20 @@ An English learner writes a plain, careful poem. Both signals read it as AI-like
 <!-- Write the rule in words, then give the numbers. What happens when the two
      signals disagree? -->
 
-**The rule:**
+**The rule:** Take a weighted average of the two scores, then apply one safety
+rule for disagreement. If the two signals are far apart, I don't trust either
+of them enough to call a text AI, so the combined score is capped just under
+the AI line. Two methods disagreeing is itself uncertainty, and a wrong AI
+accusation costs the writer more than a missed detection (criterion 1). The cap
+only holds back an AI call. It never pushes a score toward AI.
 
 **The numbers:**
+- Weight on the model signal: 0.7. Weight on the style signal: 0.3 (see the
+  tuning note below for why the model signal counts for more).
+- Disagreement gap: 0.40. If `abs(model_score - style_score)` is more than 0.40,
+  the combined score is `min(weighted average, 0.60)`.
+- Both signals point the same way (higher means more likely AI), so no flipping
+  is needed at this stage.
 
 **Where it lives:** `scoring.py::combine_signals`
 
@@ -107,6 +118,85 @@ An English learner writes a plain, careful poem. Both signals read it as AI-like
      somewhere else, say where. -->
 
 **A case where my two signals split, and what my rule does with it:**
+
+I ran four inputs through both signals (`combine_signals` with the 0.7/0.3
+weights and the disagreement cap):
+
+| Input | model_score | style_score | combined |
+|---|---|---|---|
+| Clearly AI (chatbot paragraph about remote work) | 0.810 | 0.668 | 0.767 |
+| Clearly human (informal story about a missed bus) | 0.229 | 0.165 | 0.210 |
+| Formal human (history essay) | 0.614 | 0.692 | 0.637 |
+| Lightly edited AI (same topic, casual rewrite) | 0.612 | 0.541 | 0.591 |
+
+Clearly AI and clearly human land about 0.56 apart, so the signals separate
+the easy cases. The widest split among these four was the AI paragraph, where
+the model signal said 0.81 and the style signal 0.67 — a gap of 0.14, well
+under my 0.40 disagreement gap, so the cap did not fire and the plain weighted
+average (0.767) was used. None of these four disagreed by more than 0.40.
+
+Across the 15 texts below, exactly one did: a casual human piece scoring 0.46
+on the model signal and 0.02 on the style signal, a gap of 0.44. The cap fired
+and changed nothing, because the weighted average (0.330) was already far
+below the 0.60 cap. So the cap has now triggered on real text, but it has
+still never actually held a score down. It only bites when one signal is high
+and the other is low, and so far nothing I have written does that.
+
+The bigger finding is that the style signal cannot tell formal human writing
+from AI. The formal essay (0.637) and the lightly edited AI (0.591) are only
+0.05 apart, and on the 15-text set the formal group's style scores (mean 0.67)
+sit almost on top of the AI group's (mean 0.73). Short even sentences and
+little unusual punctuation look machine-like to the style signal. That is the
+false positive I traced in Milestone 1.
+
+**Tuning note.** To avoid fitting four texts, I scored 15 more (five AI, five
+casual human, five formal human; I wrote them myself, so the "human" ones are
+not real student writing and this is only a rough check). Averages:
+
+| Group | model_score | style_score |
+|---|---|---|
+| AI | 0.81 | 0.73 |
+| Formal human | 0.62 | 0.67 |
+| Casual human | 0.31 | 0.12 |
+
+The style signal separates casual writing from AI well (0.12 vs 0.73) but not
+formal writing from AI (0.67 vs 0.73). The model signal separates formal human
+from AI better than the style signal does (0.62 vs 0.81), though on five
+self-written texts per group that is a weak basis for the claim. So I moved the
+weights from 0.5/0.5 to 0.7/0.3 toward the model signal. On the 15 texts, the
+combined AI scores ran 0.71 to 0.85, formal human 0.55 to 0.64 except one
+outlier at 0.81, and casual human 0.23 to 0.33. The outlier, a formal essay
+about the Treaty of Versailles, scored high on both signals (0.82 and 0.80), so
+no weighting rescues it. A line near 0.70 would separate almost everything here
+but would still accuse that one formal writer. That is an honest limit of
+these two signals, not something to tune away, and it feeds my Milestone 5
+threshold choice.
+
+I also lowered the vocabulary-variety measure's weight inside the style signal
+from 0.2 to 0.1. On short texts almost every text has a high unique-word ratio
+(0.87 to 0.94), so it pushed everything toward "human" and did not help
+tell them apart. The final style weights are sentence-length spread 0.5,
+punctuation 0.4, vocabulary variety 0.1.
+
+**Two bugs a review of my own code found, and what they say about the signal.**
+Both were in the style signal, and both moved scores in the direction that
+accuses people:
+
+1. A text of one real sentence plus a fragment — `"Hello there my friend. ..."`
+   — scored 0.90 where the same sentence without the `...` scored 0.65. The
+   fragment counted as a second sentence when deciding whether there was any
+   spread to measure, but was dropped when measuring it, so the text looked
+   perfectly even, which reads as AI. Measuring and deciding what is worth
+   measuring now count the same sentences (`stylometry.sentence_lengths`).
+2. Curly quotes were not counted as punctuation, so the same sentence pasted
+   from a word processor scored as more AI-like than one typed with straight
+   quotes. Plain hyphens *were* counted, so `"state-of-the-art"` and other
+   compound words made formal prose read as strongly human.
+
+Both are the same mistake in different clothes: this signal measures the shape
+of the text, so anything that changes the shape without changing the substance
+moves it. That is cheap to do on purpose, and it is what I expect unit 8's
+attack set to do.
 
 
 

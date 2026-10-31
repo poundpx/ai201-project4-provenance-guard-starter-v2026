@@ -60,8 +60,13 @@ MAX_SCORABLE_WORDS = 5000
 # down BEFORE you code it, and to put the numbers in your README. Whatever you
 # decide, it goes here.
 
-WEIGHT_MODEL_SIGNAL = 0.5
-WEIGHT_STYLE_SIGNAL = 0.5
+WEIGHT_MODEL_SIGNAL = 0.7
+WEIGHT_STYLE_SIGNAL = 0.3
+
+# If the two signals differ by more than this, the combined score is capped so
+# a text can't be called AI on one signal's say-so (see README, combining rule).
+DISAGREEMENT_GAP = 0.40
+DISAGREEMENT_CAP = 0.60
 
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
