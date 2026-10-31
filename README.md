@@ -539,15 +539,14 @@ rather than `decided`, as criterion 4 says.
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* simulator with slider for the corelation between model signal and style along with disagreement gap 
+- *What came back:*a slider demonstrate relationship and threashold 
+- *What I changed:*make this into a holder as a tool so next time i can spun ai and ask it to fill in usefull for other stuff
 
 **Moment 2**
-
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* i have moment in doubt so i ask spun another smarter agent to verify my work while i was working with another model
+- *What came back:* detail data of what am missing and could be improving
+- *What I changed:*i could spun multiple agent after this encounter to speed up my testing and validation process
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
