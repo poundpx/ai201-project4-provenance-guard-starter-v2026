@@ -554,24 +554,36 @@ rather than `decided`, as criterion 4 says.
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 5 per minute, 50 per day (set in `config.py`, applied to `/submit` in `app.py`)
 
 **Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+- **5 per minute** — a real writer submits a piece, maybe fixes a line and resubmits. Even someone retrying in a hurry doesn't go past a handful a minute. A script mapping my thresholds wants hundreds a minute, so it hits the wall on request 6.
+- **50 per day** — generous for one person editing heavily across a day, but useless to someone probing. Finding which edits push AI text under my 0.35 human threshold takes far more than 50 tries, and the per-day window stops a patient script that stays just under 5/minute all day (which would otherwise be 7,200 requests).
+- Lower (e.g. 2/minute) would punish a writer who fixes a typo and resubmits. Higher (e.g. 30/minute) would let a script collect enough scores in a few minutes to map the bands.
+- Two windows because they stop different attacks: per-minute stops a burst, per-day stops a slow drip.
+- **Who these numbers are for:** one person checking their own work. In a classroom, 30 students each sending their own `creator_id` still get 5/minute each, so they're fine. But any request that arrives without a `creator_id` falls back to the IP address, and a whole classroom behind one school router shares one IP — 30 students would share a single 5/minute bucket. If this ran for a school, I'd raise the IP-fallback limit (or require a creator_id) rather than raise the per-person one.
+
+**What the limit is *not*:** hitting it means a caller is behaving like a script, not that their text is AI-written. Authorship is the detector's job; the limiter only makes probing and flooding expensive.
+
+**What a caller counts as:** per `creator_id` when one is sent, falling back to the IP address when it isn't (`rate_limit_key` in `app.py`).
+
+The known weakness: `creator_id` is a value the caller types in, and nothing checks it. An attacker who sends `bot_1`, `bot_2`, `bot_3`… looks like a new caller every time and is never limited. Keying on IP would catch that, but would also lump a whole classroom or household behind one router into one caller. A real fix keys on something the caller can't invent, like a logged-in account. I'm not changing it this unit — it's written down here so the attack results can be read with it in mind.
+
+Rejected requests are not invisible: every 429 writes a `rejected` entry to `logs/audit.jsonl` with the creator_id, timestamp and which limit was hit. They have no `content_id` because the request was stopped before anything was scored.
 
 **The run of status codes when I pushed past it:**
 
-<!-- python run_attacks.py --flood 15 -->
+<!-- python run_attacks.py --flood 15 — results/flood_2026-11-07_0138.md -->
 
 ```
+200 200 200 200 200 429 429 429 429 429 429 429 429 429 429
+```
 
+10 of 15 rate limited. A rejection entry from that run:
+
+```json
+{"timestamp": "2026-11-07T06:38:29+00:00", "creator_id": "flood_tester", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
 ```
 
 ---
