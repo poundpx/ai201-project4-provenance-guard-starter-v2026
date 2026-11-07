@@ -686,18 +686,69 @@ whose work got caught by it:
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. My own writing labelled "likely AI" | ≤ 1 of 20 | 0/20 | 0/20 | 0/20 | MET — see note |
+| 2. All three bands reachable | ≥ 2 of 12 in each band | ai 4 · unsure 3 · human 5 | ai 4 · unsure 3 · human 5 | ai 4 · unsure 3 · human 5 | MET |
+| 3. Appeal path | 5 of 5 valid → `under_review` + logged beside original; fake id → error | 5/5 · 404 | 5/5 · 404 | 5/5 · 404 | MET |
+| 4. Bad input | missing → 400 + logged · empty → 400 + logged · >5,000 words → `under_review` · `/ping` answers | 3/3 · ping ok | 3/3 · ping ok | 3/3 · ping ok | MET |
+| 5. Score spread | AI avg − human avg ≥ 0.25 | 0.834 − 0.234 = **0.600** | 0.600 | 0.600 | MET |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+All three trials were identical in every criterion, as expected — neither signal is random.
 
+**How each was run**
+
+- Criteria 1, 2, 4, 5: `python run_eval.py --label before` → `results/run_2026-11-07_0318_before.md` (`run_eval.py::main`, against `app.py::submit`). Scenarios are in `scenarios.py`.
+- Criterion 3: by hand, because `run_eval.py` only sends text and an appeal needs a content_id from a submission first. A PowerShell loop submitted 5 texts per trial (each under its own creator_id so the rate limit didn't interfere), appealed each one through `app.py::appeal`, read `GET /log` back to check both the original `decided` entry and the `appeal` entry were there, then appealed a made-up id. Repeated 3 times.
+- Criterion 4's `/ping` check was done in the same loop after each trial.
+
+**Note on criterion 1.** 20 pieces of my own writing, typed in chat and pasted into `scenarios.py` exactly as written — mostly one casual sentence each, lowercase, with my real typos. In every trial: **17 human, 1 unsure, 0 AI, 2 rejected.** The unsure one is `"2-3"` (model 0.683 → combined 0.628). The two rejected are `"everywhere"` and `"sleep"`: one word each, refused with 400 `text_too_short` and logged as rejections. A rejection isn't an AI label, so the count against the target is 0 of 20. But two of my real pieces never got a label at all, which is worth knowing.
+
+(An earlier run that day used only the first 7 pieces — `results/run_2026-11-07_0311_before.md`, 0 of 7 flagged. The 20-piece run above replaces it as the recorded result.)
+
+**Real output from one trial** (trial 1, `run_eval.py::main` → `results/run_2026-11-07_0318_before.md`)
+
+Criterion 1 — two of my pieces:
 ```json
-
+{"status": 200, "guess": "human", "confidence": 0.2005, "model_score": 0.0078, "style_score": 0.65,
+ "label": "We think this was probably written by a person.", "sent": "yesterday i have food it was delicious"}
+{"status": 200, "guess": "human", "confidence": 0.312, "model_score": 0.1671, "style_score": 0.65,
+ "label": "We think this was probably written by a person.", "sent": "the hardest part of this project is trying to understand while reading"}
 ```
+
+Criterion 2 — one from each band:
+```json
+{"status": 200, "guess": "ai", "confidence": 0.8735, "model_score": 0.9299, "style_score": 0.7419}
+{"status": 200, "guess": "unsure", "confidence": 0.4176, "model_score": 0.5154, "style_score": 0.1894}
+{"status": 200, "guess": "human", "confidence": 0.305, "model_score": 0.1761, "style_score": 0.6059}
+```
+
+Criterion 3 — one appeal (`app.py::submit`, then `app.py::appeal`, then `GET /log` for that content_id):
+```json
+{"confidence":0.2869,"content_id":"7e57c955-44f1-4d66-8709-945932c82203","guess":"human","label":"We think this was probably written by a person.","model_score":0.0963,"status":"decided","style_score":0.7316,"word_count":21}
+{"content_id":"7e57c955-44f1-4d66-8709-945932c82203","message":"Thanks. Your appeal is recorded and a person will take a look.","status":"under_review"}
+[{"combined_score":0.2869,"content_id":"7e57c955-44f1-4d66-8709-945932c82203","creator_id":"eval_appeal_t3_5","guess":"human","model_score":0.0963,"status":"decided","style_score":0.7316,"timestamp":"2026-11-07T08:14:05+00:00","word_count":21},
+ {"content_id":"7e57c955-44f1-4d66-8709-945932c82203","creator_id":"eval_appeal_t3_5","event":"appeal","reasoning":"I wrote this myself.","status":"under_review","timestamp":"2026-11-07T08:14:05+00:00"}]
+```
+```
+trial 1: valid appeals ok=5/5  fake_id_status=404  ping_ok=True
+trial 2: valid appeals ok=5/5  fake_id_status=404  ping_ok=True
+trial 3: valid appeals ok=5/5  fake_id_status=404  ping_ok=True
+```
+
+Criterion 4 — from `logs/audit.jsonl`:
+```json
+{"timestamp": "2026-11-07T08:11:33+00:00", "creator_id": "eval_bad_missing", "event": "rejected", "status": "rejected", "reason": "missing_text"}
+{"timestamp": "2026-11-07T08:11:33+00:00", "creator_id": "eval_bad_empty", "event": "rejected", "status": "rejected", "reason": "empty_text"}
+{"timestamp": "2026-11-07T08:11:34+00:00", "content_id": "acf4d190-40f4-44a2-8119-9db63ed09bc1", "creator_id": "eval_bad_huge", "guess": "unsure", "model_score": 0.9975, "style_score": 0.75, "combined_score": 0.9233, "status": "under_review", "word_count": 6000}
+```
+
+Criterion 5 — combined scores, trial 1:
+```
+AI:    0.7819  0.8339  0.8470  0.8735   → avg 0.834
+Human: 0.2005  0.2220  0.2021  0.3120   → avg 0.234
+gap 0.600 (target ≥ 0.25)
+```
+
+**Something the runs showed that I didn't test for:** an earlier preview run I did twice in quick succession had trial 3 of the bad-input scenario come back 429 (`logs/audit.jsonl`, 08:07:11) — my own rate limit hit my own test harness, because each scenario reuses the same creator_id across trials. The recorded run above was done once, cleanly.
 
 **Diagnoses**
 
