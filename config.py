@@ -83,7 +83,10 @@ DISAGREEMENT_CAP = 0.60
 # that decide who pays for it.
 
 HUMAN_THRESHOLD = 0.35
-AI_THRESHOLD = 0.70
+# Unit 8 improvement: raised from 0.70. Six human texts in the attack set
+# (FP02-FP07) scored 0.74-0.79 and were labelled AI; 0.80 is the smallest
+# move that puts all six in "unsure" while EV10 (0.887) is still caught.
+AI_THRESHOLD = 0.80
 
 # ⚠️ One thing that catches people out in Milestone 5. A weighted average can
 # only land between its two inputs — so while `style_signal` is still the stub

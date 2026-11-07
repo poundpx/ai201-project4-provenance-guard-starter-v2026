@@ -815,21 +815,85 @@ Nearly every one of my one-sentence pieces got a style score of **exactly 0.65**
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** one line in `config.py` — `AI_THRESHOLD` from **0.70 to 0.80**. Nothing else moved: same signals, same weights (0.7 / 0.3), same disagreement rule, same human threshold (0.35), same rate limits.
 
-**Which diagnosis pointed at it:**
+```
+before:  0 ── human ── 0.35 ── unsure ── 0.70 ── AI ── 1
+after:   0 ── human ── 0.35 ──── unsure ──── 0.80 ── AI ── 1
+```
+
+**Which diagnosis pointed at it:** root cause 1. Six human texts in the attack set (FP02–FP07) scored 0.741–0.785 and were labelled AI because signal one reads formal writing as predictable. My worst outcome, FP03, is one of them. I'd rather a real writer get "unsure" than be accused, even if that lets some AI text through.
+
+**Why 0.80 and not another number:** the highest of the six was FP05 at 0.785, so 0.80 is the smallest round step that moves all six out of the AI band. Going higher buys nothing in this data and costs more: at 0.90, EV10 (0.887), the only AI attack I caught, would slip to unsure as well.
+
+**What I considered and didn't pick:** before changing anything I re-scored the recorded "before" model and style scores under five candidate changes. Neither signal is random, so this predicts exactly what the labels would be.
+
+| Option | Innocents accused (FP) | Evasion/injection passing as human | Cost |
+|---|---|---|---|
+| Before (no change) | 6 | 3 | — |
+| **AI line 0.70 → 0.80 (picked)** | **0** | 3 | one of my 4 clear-AI test texts drops to unsure |
+| Disagreement gap 0.40 → 0.30 | 4 | 3 | EV10 drops to unsure — loses my only caught AI attack |
+| Weights 0.7/0.3 → 0.5/0.5 | 4 | 1 | still accuses 4 people; lots of human text moves to unsure |
+| Human line 0.35 → 0.30 | 6 | 1 | does nothing for the people being accused |
+
+Reweighting catches more cheaters, but it still accuses four real writers, and protecting them is the point. The threshold is the only option that gets that to zero.
 
 ### Attack Run — After
 
-<!-- Same format. `run_attacks.py --label after` -->
+`python run_attacks.py --set attack_set --label after` → `results/attack_run_2026-11-07_0343_after.md`. Every model, style and combined score came back **identical** to the before run. Only labels moved, which confirms the threshold was the only thing that changed.
 
+| ID | Family | Combined | Before | After | Mark before → after |
+|---|---|---|---|---|---|
+| FP02 | false_positive | 0.741 | ai | unsure | BROKE → **HELD** |
+| FP03 | false_positive | 0.765 | ai | unsure | BROKE → **HELD** |
+| FP04 | false_positive | 0.768 | ai | unsure | BROKE → **HELD** |
+| FP05 | false_positive | 0.785 | ai | unsure | BROKE → **HELD** |
+| FP06 | false_positive | 0.770 | ai | unsure | BROKE → **HELD** |
+| FP07 | false_positive | 0.767 | ai | unsure | BROKE → **HELD** |
+| EV10 | evasion | 0.887 | ai | ai | HELD → HELD |
+| EV01 | evasion | 0.346 | human | human | BROKE → BROKE |
+| EV05 | evasion | 0.340 | human | human | BROKE → BROKE |
+| PI02 | prompt_injection | 0.236 | human | human | BROKE → BROKE |
+| MF03 | malformed | 0.150 | human | human | BROKE → BROKE |
+| MF04 | malformed | 0.158 | human | human | BROKE → BROKE |
+| RQ06 | malformed | 0.184 | human | human | BROKE → BROKE |
 
+Every other attack (43 of 56) had the same status and label in both runs, all HELD: EV02–EV09, FP01, FP08, PI01, PI03–PI06 unsure; MF05–MF08 and RQ02 unsure (MF08 `under_review`); MF01, MF02, RQ01, RQ03–RQ05, RQ07–RQ09, RQ12 400; RQ10, RQ11 429; FL01 200 ×5 then 429 ×7.
 
-**Did it help, and how do I know:**
+| Family | Broke before | Broke after |
+|---|---|---|
+| evasion | 2 | 2 |
+| false_positive | **6** | **0** |
+| prompt_injection | 1 | 1 |
+| malformed | 3 | 3 |
+| flood_same_creator | 0 | 0 |
+| **Total** | **12** | **6** |
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
+### Run log — after
 
+`python run_eval.py --label after` → `results/run_2026-11-07_0344_after.md`; criterion 3 and `/ping` by hand, the same way as before.
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict before | Verdict after |
+|---|---|---|---|---|---|---|
+| 1. My own writing labelled "likely AI" | ≤ 1 of 20 | 0/20 | 0/20 | 0/20 | MET | MET |
+| 2. All three bands reachable | ≥ 2 of 12 in each | ai 3 · unsure 4 · human 5 | same | same | MET | MET |
+| 3. Appeal path | 5/5 + fake id errors | 5/5 · 404 | 5/5 · 404 | 5/5 · 404 | MET | MET |
+| 4. Bad input | 3 cases + `/ping` | 3/3 · ping ok | 3/3 · ping ok | 3/3 · ping ok | MET | MET |
+| 5. Score spread | gap ≥ 0.25 | 0.600 | 0.600 | 0.600 | MET | MET |
+
+```
+label coverage  (criterion 2), trial 1 after:  unsure, ai, ai, ai, human, unsure, unsure, unsure, human, human, human, human
+spread ai       (criterion 5), trial 1 after:  unsure, ai, ai, ai
+trial 1: valid appeals ok=5/5  fake_id_status=404  ping_ok=True
+trial 2: valid appeals ok=5/5  fake_id_status=404  ping_ok=True
+trial 3: valid appeals ok=5/5  fake_id_status=404  ping_ok=True
+```
+
+**Did it help, and how do I know:** yes, for the problem I aimed it at. False positives in the attack set went from 6 to 0, and every criterion still holds in all three trials. I know it was this change because the scores in both runs are identical to four decimal places; only the line moved.
+
+**What it cost:** my first clear-AI test text (`AI_CLEAR[0]`, combined 0.782) used to be labelled AI and is now unsure. That's a real AI essay that a teacher would no longer see flagged. Criterion 2 still passes, but the AI band shrank from 4 texts to 3. Criterion 5 doesn't notice, because it measures scores rather than labels. The unsure band is now 0.45 wide instead of 0.35, so more of everything will land there, and "unsure" only works if a person actually reads those.
+
+**What it didn't touch:** the three evasions that get through (EV01, EV05, PI02) score *below* 0.35, at the bottom of the range, so moving the top line can't reach them. The route problems (MF03, MF04, RQ06) aren't about thresholds at all. Both are in What's Still Broken.
 
 
 ---
