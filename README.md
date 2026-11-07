@@ -766,6 +766,49 @@ gap 0.600 (target ≥ 0.25)
 
      Look for a pattern. Five failures on one signal is one problem, not five. -->
 
+### How each verdict was decided
+
+| # | Verdict | How I decided |
+|---|---|---|
+| 1 | MET | 0 of 20 labelled AI in each of 3 trials; the target allows 1. The two 400s (`"everywhere"`, `"sleep"`) aren't AI labels, so they don't count against it. |
+| 2 | MET | Every trial had ai 4 · unsure 3 · human 5. The weakest band is unsure at 3, still above the 2 required. |
+| 3 | MET | 5 of 5 valid appeals returned `under_review` with both the original and the appeal entry in the log, and the made-up id returned 404, in all 3 trials. |
+| 4 | MET | Missing and empty text both returned 400 and wrote a `rejected` entry; 6,000 words came back `under_review`; `/ping` answered after each trial. All 3 trials. |
+| 5 | MET | Gap of 0.600 in all 3 trials against a target of 0.25. |
+
+No trial differed from another in any criterion, so there's nothing unstable to explain.
+
+### I held all five of my criteria — and the attack set says my targets were too easy
+
+My own writing: **0 of 20** labelled AI. The attack set's human writing: **6 of 8** labelled AI. Both are human-written, so criterion 1 didn't fail because the detector is safe — it passed because of what I fed it. My 20 pieces are casual one-liners, lowercase, with my own typos. Signal one finds that kind of text surprising, so it scores it as human (model scores 0.008–0.17). The texts that got accused in the attack set were the opposite: careful, formal, plain. I tested the metal detector on people with no metal on them.
+
+**The criterion I'd tighten is 1:**
+
+> Of 20 pieces I wrote myself, **at least 5 of them written formally or carefully, the way I'd write a school essay**, at most 1 is labelled "likely AI."
+
+That version would actually exercise the case I named in unit 7 ("an English learner writing plain, careful sentences looks AI-like"), which is exactly what FP03 turned out to be. I'm recording this as a recommendation, not editing criteria.md — the original criterion was measurable and I met it, so it isn't a revision.
+
+**The argument against my own "MET" on criterion 1:** the sample wasn't representative of the people the criterion exists to protect. All 20 pieces were short and informal, a style my detector is already known to pass, so a pass on them tells me almost nothing about formal human writing. What would settle it is the tightened run above — formal pieces of my own — and the attack set's FP family is strong evidence it would fail.
+
+### Diagnoses — 12 broken attacks, 2 root causes
+
+**Root cause 1 — signal one reads "predictable" as "AI", and the combining rule lets it decide alone. (9 breaks: FP02–FP07, EV01, EV05, PI02)**
+
+*False positives, FP02–FP07 (6 broken).* All six are human writing in a formal, careful, or templated register. Signal one (`detector.model_signal`) scores how easily GPT-2 predicts each next word, and formal writing is built from common words in common orders — "furthermore", "in conclusion", a rubric's expected structure. So signal one scored all six between 0.74 and 0.88. Signal two didn't push back: on FP06 and FP07 it was at 0.51 and 0.50, essentially no opinion. The combining rule (`scoring.py::combine_signals`) weights signal one at 0.7, so a 0.88 from it alone gives 0.62 before signal two adds anything, and the totals landed at 0.74–0.79, over the 0.70 AI threshold. The disagreement cap should be the safety net, but it only fires when the signals are more than 0.40 apart, and the biggest gap was FP07 at 0.382 — 0.018 short. **Stage: signal one, amplified by the combining rule. Mechanism: formal human prose is predictable, signal one treats predictable as AI, and a 0.7 weight means signal two can't outvote it.**
+
+*Evasions, EV01 and EV05 (2 broken), and injection PI02 (1 broken).* The same signal failing in the other direction. EV01 added typos to AI text; the set says it was aimed at signal two (typos raise word variety), but signal two wasn't fooled — it scored 0.77, AI-like. Signal one was: misspelled words are surprising to GPT-2, so it dropped to 0.16, and at 0.7 weight that pulled the combined score to 0.3465, 0.0035 under the 0.35 human line. EV05 (heavy human editing) did the same more gently — model 0.32, style 0.38, combined 0.340. PI02's fake "system message" didn't command anything — nothing in my pipeline follows instructions — but its odd wording is just as surprising to GPT-2, which gave 0.20 and a human label. **Stage: signal one. Mechanism: anything that makes text less predictable — typos, edits, strange wording — reads as human, and the 0.7 weight carries it straight through.**
+
+These are one problem, not nine: signal one measures predictability, not authorship, and my combining rule trusts it at 70%.
+
+**Root cause 2 — the route checks that text exists, not that it's writing. (3 breaks: MF03, MF04, RQ06)**
+
+*MF03 (control characters) and MF04 (only punctuation)* were both labelled "We think this was probably written by a person." The route (`app.py::submit`) refuses missing, non-string, empty and whitespace-only text, but a string of `!!!???` is none of those, so it reaches the signals. GPT-2 scores it near 0 (0.000 and 0.011), and signal two returns exactly 0.5 because it has fewer than 5 words (`stylometry.py::style_signal` returns 0.5 below 5 words). Combined: 0.15 → human. **Stage: the route. Mechanism: validation checks for an empty string but not for any actual words, so non-writing reaches a detector that can only answer "AI" or "human".**
+
+*RQ06 (`creator_id` is an object)* was accepted and written to the audit log as `"creator_id": {"id": "x"}`. The route reads `creator_id` with `payload.get("creator_id", "unknown")` and never checks it's a string. The rate limiter's key function does check, and fell back to the IP, so the limit still applied — but the log now holds a creator_id nobody can search by. **Stage: the route. Mechanism: creator_id isn't type-checked before it's logged.**
+
+### Something else the runs showed: signal two guesses on short text
+
+Nearly every one of my one-sentence pieces got a style score of **exactly 0.65**. That isn't a measurement — it's arithmetic on fallbacks. In `stylometry.py::style_signal`, a one-sentence text has no sentence-length spread, so that measure falls back to 0.5; every word is different, so vocabulary contributes 0; and casual writing has no semicolons, dashes or quotes, so punctuation reads as fully AI-like (1.0). 0.5 × 0.5 + 0.1 × 0 + 0.4 × 1.0 = 0.65, whatever the sentence says. Below 5 words it's an exact 0.5 instead — the same value MF03–MF07 got. Signal two has no real opinion on short text, which means on short submissions my service is effectively running on signal one alone.
 
 
 ---
