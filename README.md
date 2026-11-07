@@ -548,6 +548,27 @@ rather than `decided`, as criterion 4 says.
 - *What came back:* detail data of what am missing and could be improving
 - *What I changed:*i could spun multiple agent after this encounter to speed up my testing and validation process
 
+**Unit 8 — Moment 3 (learning the concepts)**
+- *What I asked for:* I asked Claude to read my code first and explain each milestone before touching anything, because I wanted to learn it, not just get it done. When the explanations were too technical I asked for a fun version.
+- *What came back:* analogies that worked for me — a nightclub bouncer for the creator_id weakness, a castle with five guards for my pipeline, a metal detector tested on people with no metal for my criterion 1.
+- *What I changed:* I made my own calls on top of it: 5/minute and 50/day for the limits, "unsure counts as held", FP03 as the worst outcome, and "we cannot let people get harmed" as the direction for the fix.
+
+**Unit 8 — Moment 4 (drafting and running)**
+- *What I asked for:* Claude ran the attack set and the evals, simulated five possible fixes on my recorded scores, and drafted most of the Unit 8 README sections, which I reviewed. It also wrote the AI and borderline test texts in `scenarios.py`, which are supposed to be AI.
+- *What came back:* the simulation showed raising the AI line to 0.80 was the only option that took false positives to zero, which matched what I wanted.
+- *What I changed:* when I asked it to write my 20 "own writing" pieces, it refused, because then the test would be measuring AI text. I wrote all 20 myself. It also caught that my editor had overwritten its README changes with an old copy.
+- *What was annoying:* reading a lot of AI output to understand it is tedious — that was the hardest part of this project for me.
+
+**Unit 8 — Moment 5**
+- *What I asked for:* project keeper
+- *What came back:* it demonstrate keeping up with project and i done everything in claude app
+- *What I changed:*make it into work flow so later i can just reuse for efficiency
+
+**Unit 8 — Moment 6**
+- *What I asked for:* Use agent to test multiple parameter tweek for milestone 5 and 4 crafting hypothesis
+- *What came back:* data come back quick test 
+- *What I changed:*use this process more spun multiple agent to do these to test for possibilities
+
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
 ---
@@ -900,16 +921,28 @@ trial 3: valid appeals ok=5/5  fake_id_status=404  ping_ok=True
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
+After the improvement, 6 of 56 attacks still break, and all five criteria are met. The 6 come from the same two root causes as before.
 
+| Still broken | Stage | What I'd do | Why I stopped |
+|---|---|---|---|
+| **EV01, EV05** — AI text with typos or heavy edits labelled human (0.346, 0.340) | signal one + 0.7 weight | Lower signal one's weight, or lower the human line to 0.30. My simulation says either one catches EV01 and EV05. | One change per unit, and I spent it on false positives. Also, reweighting to 0.5/0.5 put four innocent writers back in the AI band in my simulation, so this fix has a cost I'd have to test on its own. |
+| **PI02** — fake "system message" labelled human (0.236) | signal one | Same as above. It isn't really an injection problem: nothing obeyed the instruction, its wording just looked unpredictable to GPT-2. | Same. |
+| **MF03, MF04** — control characters and punctuation labelled "written by a person" | route | In `app.py::submit`, refuse text with fewer than a handful of real words before it reaches the signals, with a 400 that says why. | Not allowed this unit. It's the easiest fix on this list, and I'd do it next because it has no trade: nobody's real writing is `!!!???`. |
+| **RQ06** — `creator_id` as an object written to the log | route | Reject or stringify a creator_id that isn't a string. | Not allowed this unit. Easy, and it's next after the one above. |
 
+**Also still broken — things I found myself:**
+
+- **Signal two guesses on one-sentence text.** It gives exactly 0.65 (or 0.5 under 5 words) whatever the sentence says, so short submissions are really judged by signal one alone. A fix would be to report "can't tell" and let the combining rule ignore signal two for those, instead of feeding it a fake number.
+- **The rate limit can be dodged.** It's keyed on a creator_id the caller makes up, so changing it every request gets a fresh limit. A real fix needs a login the caller can't invent.
+- **My criterion 1 test was too easy.** All 20 pieces of my writing were casual one-liners, which my detector already passes. I'd re-run it with formal pieces of my own (see Run Log and Verdicts).
+- **Two of my real answers got no label.** "sleep" and "everywhere" were refused as too short. That's right for a detector, but a real writer just gets an error.
+- **The wider unsure band only works if someone reads it.** After the change, more submissions land in unsure. If nobody reviews those, unsure just means "we didn't decide."
+
+**A case my system can't really handle: writing that's half human and half AI.** EV09 (a human opening paragraph bolted onto AI text) came back unsure, and that's probably the honest answer. But I don't think the right label for mixed work is something a detector can decide. Using AI to help with a problem, or writing creatively with it, is part of how people work now. AI frees up time and takes workload away. Whether that's allowed depends on the setting: if a school limits AI use in a class, following that is the student's responsibility, and the detector is a tool for that policy. It isn't the policy. My label already says "with the help of AI" rather than "written by AI", and a real system would need the school's rules on mixed work before it could say more.
 
 **The trade I'd make if this ran for real:**
 
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
-
+I'd keep leaning toward fewer wrong accusations. I raised the AI line to 0.80 so careful and second-language writers like FP03 land in unsure instead of being accused, and I'd keep it there even though some AI essays now get through. The people who pay for that are teachers and honest classmates, who get less help catching AI work. I think that's better than making a real writer prove they wrote their own work, because the writer most likely to be wrongly flagged is also the least likely to appeal.
 
 
 <!-- ═════════════════════════════════════════════════════════════════════
