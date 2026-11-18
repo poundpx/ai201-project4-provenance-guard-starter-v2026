@@ -191,7 +191,12 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 @app.post("/submit")
-@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+# Capstone improvement (criterion 4): a body that isn't a JSON object can't
+# reach the model. It's refused with a 400 in ~15 ms, so it's exempt from the
+# limiter. Before this, such requests were keyed by IP and shared one bucket,
+# so the 6th in a minute got a 429 instead of the 400 the route would return.
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day",
+               exempt_when=lambda: not isinstance(request.get_json(silent=True), dict))
 def submit():
     """
     Take a piece of text, decide about it, log the decision, answer.
