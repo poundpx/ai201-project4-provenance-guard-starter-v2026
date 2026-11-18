@@ -981,3 +981,64 @@ I'd keep leaning toward fewer wrong accusations. I raised the AI line to 0.80 so
 ---
 
 📖 **How to run this project: [RUNNING.md](RUNNING.md)**
+
+## Capstone
+
+**What This Extends**
+
+Provenance Guard (Project 4): the Flask service that labels writing as likely-human, unsure, or likely-AI from two signals (GPT-2 perplexity + stylometry). Before this unit, `logs/audit.jsonl` recorded *decisions* only. It had no timing, no record of requests that crashed, and nothing about routes other than /submit. What's new: per-request instrumentation (`capstone_log.py`, hooked into `app.py` with `before_request` / `after_request` / an error handler) that writes one structured record per request to `logs/requests.jsonl`, with per-stage timings for /submit (`model_ms`, `style_ms`). Also a probe (`capstone_probe.py`) that drives the service and measures it from that log.
+
+**The Shape**
+
+A: Deploy and instrument. The extension is the operational layer: a documented single-command run path, structured request logging, and measured latency and compute cost.
+
+Out of scope:
+- Not changing either signal, the combining rule, or the thresholds.
+- Not fixing the false-positive families found by the Unit 8 attack set.
+- Not hosting it. The model doesn't fit a 512 MB free tier (see Running It).
+
+**Running It**
+
+Path B, local with logs. One command (`python app.py`) after setup. Full steps and environment in RUNNING.md under "Capstone run path".
+
+**Instrumentation**
+
+Each record in `logs/requests.jsonl`: `timestamp` (UTC, ms), `route`, `method`, `input` (creator_id, first 80 chars of text, word_count, or a preview of a malformed body), `status`, `output` (first 300 chars of the response), `duration_ms` (inside the service), `model_ms` and `style_ms` (/submit only), `error` (only on a 500).
+
+```
+TODO: paste 10+ lines from logs/requests.jsonl, including at least one rejected input (400)
+```
+
+**What It Costs**
+
+No API is called, so the real cost is compute time. Measured: mean `duration_ms` of successful /submit requests across the probe run, from `logs/requests.jsonl`, read by `capstone_probe.py` (N = 11 per trial × 3 trials).
+
+```
+TODO: paste the "Compute per /submit" line from each trial
+```
+
+Hundred people a day: 100 people × __ submissions each × __ s = __ s of CPU per day (show the multiplication).
+
+**Run Log and Verdicts**
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. | | | | | |
+| 2. | | | | | |
+| 3. | | | | | |
+| 4. | | | | | |
+| 5. | | | | | |
+
+Real output (from `capstone_probe.py::main` → `results/capstone_before.md`, and `capstone_log.py::log_request` → `logs/requests.jsonl`):
+
+```
+TODO
+```
+
+Diagnosis per miss (stage + mechanism):
+
+**The Improvement**
+
+**What's Still Broken**
+
+**How I Used AI**

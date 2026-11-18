@@ -306,3 +306,34 @@ is evidence, and the entries you paste into your README are what unit 8 grades.
 
 **Do not delete and recreate this repository.** You submit the same URL both
 units.
+
+---
+
+## Capstone run path (Path B, local with logs)
+
+This system loads GPT-2 locally (~550 MB on disk, more in memory), which doesn't fit the course's 512 MB free host. It runs locally instead, from one command.
+
+**Environment**
+- Python 3.11, 3.12 or 3.13 (not 3.14)
+- Dependencies pinned in `requirements.txt` (flask, flask-limiter, requests, transformers, torch, gunicorn, certifi)
+- Model: `gpt2` via transformers, ~550 MB, downloaded on first use (`python detector.py`)
+
+**From a clean checkout**
+
+```bash
+git clone <this repo> && cd <repo>
+python -m venv .venv
+.venv\Scripts\Activate.ps1        # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+python detector.py                # one-time model download
+python app.py                     # ← the single start command
+```
+
+**Producing the run record** (second terminal, same venv):
+
+```bash
+python capstone_probe.py --label before --trials 3
+```
+
+- Every request the service handles writes one line to `logs/requests.jsonl` (see `capstone_log.py`), including 4xx rejections and 500 crashes.
+- The probe's per-trial results are saved to `results/capstone_<label>.md`.
