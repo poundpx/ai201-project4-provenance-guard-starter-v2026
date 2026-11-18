@@ -171,3 +171,24 @@ for everything will fail it, which is the finding I actually want to catch.
      A number you missed stays where it is, gets diagnosed, and gets a fix
      attempted. That's where the points are.
      ───────────────────────────────────────────────────────────────────────── -->
+
+---
+
+## Capstone criteria
+
+Written before any capstone results. Measured by `capstone_probe.py` (3 trials, 20 requests each) from `logs/requests.jsonl`.
+
+1. **Every request gets logged.** Of the 20 requests the probe sends per trial, 20 of 20 have a record in `logs/requests.jsonl`, including the blank and bad inputs.
+   Why this target: I need to be tip-top on the data, because requests matter for security. A request that doesn't leave a record is one I can't look into later.
+
+2. **A normal submission comes back in under 5 seconds.** All 11 normal `/submit` requests per trial have `duration_ms` under 5000.
+   Why this target: 5 s seems reasonable for a writer to wait. The request times out at 20 s, and the slow part is probably the model stage, so 5 s gives a margin well under the timeout.
+
+3. **One check costs at most 10 seconds of compute.** Mean `duration_ms` of successful `/submit` requests is at most 10 s per trial.
+   Why this target: most of the cost of running this is infrastructure. If I had a budget like $20 a month for hosting, anything over 10 s per check would be more than I'm happy to pay for and would mean scaling up the server.
+
+4. **Bad inputs are refused, not crashed.** Of the 7 bad inputs the probe sends, at least 6 of 7 get a 400.
+   Why this target: a bad input should get a clear answer instead of a crash. I'm allowing one because I haven't tested every bad input against the new logging yet.
+
+5. **Over-long text isn't given a confident label.** The 6,000-word submission comes back with status `under_review` in all 3 trials.
+   Why this target: the detector can only read part of a text that long, so a confident human/AI label on it would be a guess, and a wrong guess on a real writer is the worst outcome for this system.
