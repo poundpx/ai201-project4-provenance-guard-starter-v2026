@@ -1094,5 +1094,5 @@ It helped: criterion 4 went from MISSED to MET, and `bad_json_list` returned 400
 
 **How I Used AI**
 
-1. TODO (your words): e.g. I asked Claude to add structured logging and a probe to my project. It wrote `capstone_log.py`, the hooks in `app.py`, and `capstone_probe.py`. What I changed or checked: ___
-2. TODO (your words): e.g. I gave Claude rough ideas for criteria. It told me which ones had no number and asked me for targets. I chose 20/20, 5 s, 10 s and 6 of 7. Criterion 5 (the 6,000-word case) was Claude's suggestion. It also caught that my first run happened before my criteria existed, so I discarded it and re-ran.
+1.  Using AI to structure and keep track of my progress , i tend to be jumping on task on different time so using task tracking is a big plus to keep me on track.
+2.  Using AI to do audit for all my task to see if they are up to bar , i use it as a judge to see if my project reach quality that i set out.
