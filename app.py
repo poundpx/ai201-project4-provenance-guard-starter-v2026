@@ -24,17 +24,54 @@ Routes:
     GET  /health      is the service up, and is the model loaded
 """
 
+import time
 import uuid
 
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 
 import audit
+import capstone_log
 import config
 import detector
 import scoring
 import stylometry
 
 app = Flask(__name__)
+
+
+# ── Capstone: request instrumentation ─────────────────────────────────────────
+# Every request (including rejections and crashes) writes one record to
+# logs/requests.jsonl: timestamp, route, input, status, output, duration_ms,
+# and per-stage timings for /submit. See capstone_log.py.
+
+@app.before_request
+def _start_timer():
+    g.t0 = time.perf_counter()
+    g.timings = {}
+    g.logged = False
+
+
+@app.after_request
+def _log_request(response):
+    if not getattr(g, "logged", False):
+        capstone_log.log_request(request, response.status_code, response.get_data(as_text=True),
+                                 g.t0, g.timings)
+        g.logged = True
+    return response
+
+
+@app.errorhandler(Exception)
+def _crash(exc):
+    """An unhandled error becomes a logged 500 with a JSON body, not a silent stack trace."""
+    from werkzeug.exceptions import HTTPException
+    if isinstance(exc, HTTPException):
+        return exc
+    body = {"error": "internal_error", "message": "Something went wrong on our side.",
+            "type": type(exc).__name__}
+    capstone_log.log_request(request, 500, str(body), getattr(g, "t0", time.perf_counter()),
+                             getattr(g, "timings", {}), error=f"{type(exc).__name__}: {exc}")
+    g.logged = True
+    return jsonify(body), 500
 
 
 # ── Rate limiting — UNIT 8 ────────────────────────────────────────────────────
@@ -235,14 +272,18 @@ def submit():
     content_id = str(uuid.uuid4())
     word_count = len(text.split())
     try:
+        t = time.perf_counter()
         model_score = detector.model_signal(text)
+        g.timings["model_ms"] = round((time.perf_counter() - t) * 1000, 1)
     except ValueError:
         audit.log_rejection(creator_id, "text_too_short")
         return jsonify({
             "error": "text_too_short",
             "message": "That text is too short to check. Send a few sentences.",
         }), 400
+    t = time.perf_counter()
     style_score = stylometry.style_signal(text)
+    g.timings["style_ms"] = round((time.perf_counter() - t) * 1000, 1)
     combined = scoring.combine_signals(model_score, style_score)
 
     # Criterion 4. Longer than the detector can read, so it gets scored but
