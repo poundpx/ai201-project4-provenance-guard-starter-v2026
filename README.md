@@ -986,7 +986,7 @@ I'd keep leaning toward fewer wrong accusations. I raised the AI line to 0.80 so
 
 **What This Extends**
 
-Provenance Guard (Project 4): the Flask service that labels writing as likely-human, unsure, or likely-AI from two signals (GPT-2 perplexity + stylometry). Before this unit, `logs/audit.jsonl` recorded *decisions* only. It had no timing, no record of requests that crashed, and nothing about routes other than /submit. What's new: per-request instrumentation (`capstone_log.py`, hooked into `app.py` with `before_request` / `after_request` / an error handler) that writes one structured record per request to `logs/requests.jsonl`, with per-stage timings for /submit (`model_ms`, `style_ms`). Also a probe (`capstone_probe.py`) that drives the service and measures it from that log.
+Provenance Guard (Project 4): the Flask service that labels writing as likely-human, unsure, or likely-AI from two signals (GPT-2 perplexity + stylometry). Before this unit, `logs/audit.jsonl` recorded *decisions* only. It had no timing, no record of crashes, and nothing about routes other than /submit. What's new: per-request instrumentation (`capstone_log.py`, hooked into `app.py` with `before_request` / `after_request` / an error handler) that writes one structured record per request to `logs/requests.jsonl`, with per-stage timings for /submit (`model_ms`, `style_ms`). Also a probe (`capstone_probe.py`) that drives the service and measures it from that log.
 
 **The Shape**
 
@@ -999,46 +999,100 @@ Out of scope:
 
 **Running It**
 
-Path B, local with logs. One command (`python app.py`) after setup. Full steps and environment in RUNNING.md under "Capstone run path".
+Path B, local with logs. One command (`python app.py`) after setup. GPT-2 (~550 MB) runs locally, which is why this isn't on the 512 MB free host. Full steps and environment in RUNNING.md under "Capstone run path".
 
 **Instrumentation**
 
-Each record in `logs/requests.jsonl`: `timestamp` (UTC, ms), `route`, `method`, `input` (creator_id, first 80 chars of text, word_count, or a preview of a malformed body), `status`, `output` (first 300 chars of the response), `duration_ms` (inside the service), `model_ms` and `style_ms` (/submit only), `error` (only on a 500).
+Each record in `logs/requests.jsonl`: `timestamp` (UTC, ms), `route`, `method`, `input` (creator_id, first 80 chars of text, word_count, or a preview of a malformed body), `status`, `output` (first 300 chars of the response; trimmed below for space), `duration_ms` (time inside the service), `model_ms` and `style_ms` (/submit only), `error` (only on a 500).
+
+13 consecutive entries from the after-fix run, trial 2. They include six rejected inputs (400s) and a 404:
 
 ```
-TODO: paste 10+ lines from logs/requests.jsonl, including at least one rejected input (400)
+{"timestamp": "2026-11-18T22:38:41.927+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_0f77f9fd", "text_preview": "We missed the last train so we walked home across the bridge at 2am. Cold, tired", "word_count": 26}, "status": 200, "output": "{\"confidence\": 0.6754,\"content_id\": \"c5448925-9c92-477d-9d94-0dd2b42edc05\",\"guess\": \"unsure\",\"label\": \"We coul", "duration_ms": 74.0, "model_ms": 61.5, "style_ms": 0.1}
+{"timestamp": "2026-11-18T22:38:42.031+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_ca70a499", "text_preview": "Climate change poses significant challenges to global food security, requiring c", "word_count": 16}, "status": 200, "output": "{\"confidence\": 0.6586,\"content_id\": \"a5f918e6-d640-4435-ab23-5ad52698d706\",\"guess\": \"unsure\",\"label\": \"We coul", "duration_ms": 83.2, "model_ms": 51.6, "style_ms": 0.1}
+{"timestamp": "2026-11-18T22:38:42.112+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_e6c83548", "text_preview": "my cat knocked my coffee onto the keyboard during a zoom call and now the letter", "word_count": 25}, "status": 200, "output": "{\"confidence\": 0.2592,\"content_id\": \"ce36221d-acbc-4099-9fa5-20707dd7382c\",\"guess\": \"human\",\"label\": \"We think", "duration_ms": 72.0, "model_ms": 60.0, "style_ms": 0.1}
+{"timestamp": "2026-11-18T22:38:42.184+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_09aff881", "text_preview": "Hello, I am a student from Vietnam. I study computer science and I like to play ", "word_count": 23}, "status": 200, "output": "{\"confidence\": 0.6,\"content_id\": \"447fb9e0-c1ff-4c66-9b52-f95382c88618\",\"guess\": \"unsure\",\"label\": \"We couldn'", "duration_ms": 65.8, "model_ms": 53.5, "style_ms": 0.1}
+{"timestamp": "2026-11-18T22:38:42.203+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_82106e9e"}, "status": 400, "output": "{\"error\": \"missing_text\",\"message\": \"No text was sent.\"}", "duration_ms": 10.9}
+{"timestamp": "2026-11-18T22:38:42.219+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_e542b22a", "text_preview": "   ", "word_count": 0}, "status": 400, "output": "{\"error\": \"empty_text\",\"message\": \"The text was empty.\"}", "duration_ms": 9.4}
+{"timestamp": "2026-11-18T22:38:42.244+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_e14b5841", "text_type": "int"}, "status": 400, "output": "{\"error\": \"invalid_text\",\"message\": \"The text must be a string.\"}", "duration_ms": 10.9}
+{"timestamp": "2026-11-18T22:38:42.260+00:00", "route": "/submit", "method": "POST", "input": {"raw_body_preview": "{not json"}, "status": 400, "output": "{\"error\": \"missing_text\",\"message\": \"No text was sent.\"}", "duration_ms": 10.0}
+{"timestamp": "2026-11-18T22:38:42.289+00:00", "route": "/submit", "method": "POST", "input": {"body_type": "list"}, "status": 400, "output": "{\"error\": \"missing_text\",\"message\": \"No text was sent.\"}", "duration_ms": 9.5}
+{"timestamp": "2026-11-18T22:38:42.319+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_88fc94a9", "text_preview": "sleep", "word_count": 1}, "status": 400, "output": "{\"error\": \"text_too_short\",\"message\": \"That text is too short to check. Send a few sentences.\"}", "duration_ms": 8.0}
+{"timestamp": "2026-11-18T22:38:42.666+00:00", "route": "/submit", "method": "POST", "input": {"creator_id": "probe_859a0b86", "text_preview": "word word word word word word word word word word word word word word word word ", "word_count": 6000}, "status": 200, "output": "{\"confidence\": 0.9233,\"content_id\": \"d6111bfe-93ab-4598-ab74-e941b9bc4889\",\"guess\": \"unsure\",\"label\": \"We coul", "duration_ms": 341.8, "model_ms": 328.6, "style_ms": 2.8}
+{"timestamp": "2026-11-18T22:38:42.675+00:00", "route": "/appeal", "method": "POST", "input": {"creator_id": null, "content_id": "does-not-exist"}, "status": 404, "output": "{\"error\": \"unknown_content_id\",\"message\": \"We couldn't find that submission. Check the id and try again.\"}", "duration_ms": 2.6}
+{"timestamp": "2026-11-18T22:38:42.707+00:00", "route": "/health", "method": "GET", "input": {"body_type": null}, "status": 200, "output": "{\"detector_loaded\": true,\"detector_model\": \"gpt2\",\"log_entries\": 729,\"ok\": true,\"rate_limiting\": true}", "duration_ms": 2.4}
 ```
+
+Failure path: no request crashed (0 records with an `error` field, 0 5xx across all 120 requests in 6 trials). The rejected inputs above are the failure records. The forced client timeout (`forced_client_timeout`) also still left a server-side record in every trial, since requests sent = records logged = 20 each time.
 
 **What It Costs**
 
-No API is called, so the real cost is compute time. Measured: mean `duration_ms` of successful /submit requests across the probe run, from `logs/requests.jsonl`, read by `capstone_probe.py` (N = 11 per trial × 3 trials).
+No API is called, so the real cost is compute time. Measured by `capstone_probe.py`: mean `duration_ms` of every successful `/submit` in the trial window (12 per trial), read back from `logs/requests.jsonl`.
 
-```
-TODO: paste the "Compute per /submit" line from each trial
-```
+| | Trial 1 | Trial 2 | Trial 3 |
+|---|---|---|---|
+| Before | 0.094 s | 0.090 s | 0.092 s |
+| After | 0.387 s | 0.092 s | 0.090 s |
 
-Hundred people a day: 100 people × __ submissions each × __ s = __ s of CPU per day (show the multiplication).
+Warm, one check costs about **0.09 s of CPU**. After-run trial 1 is higher because I restarted the app before it, so its first request paid the model load (3.6 s).
+
+Hundred people a day: 100 people × 5 submissions each = 500 checks/day × 0.09 s = **45 s of CPU per day**, × 30 = 1,350 s ≈ **22.5 minutes of CPU per month**. Compute time is not the real cost. Memory is: GPT-2 has to stay loaded in a server that's always on, which is what decides the hosting bill.
 
 **Run Log and Verdicts**
 
+Before the fix (`results/capstone_before.md`):
+
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. | | | | | |
-| 2. | | | | | |
-| 3. | | | | | |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Every request logged | 20 of 20 | 20/20 | 20/20 | 20/20 | MET |
+| 2. Normal submission under 5 s | 11 of 11 | 11/11 (max 0.38 s) | 11/11 (max 0.33 s) | 11/11 (max 0.38 s) | MET |
+| 3. Compute per check at most 10 s | ≤ 10 s | 0.094 s | 0.090 s | 0.092 s | MET |
+| 4. Bad inputs get a 400 | ≥ 6 of 7 | 6/7 | 6/7 | 5/7 | MISSED |
+| 5. 6,000 words → under_review | 3 of 3 | under_review | under_review | under_review | MET |
 
-Real output (from `capstone_probe.py::main` → `results/capstone_before.md`, and `capstone_log.py::log_request` → `logs/requests.jsonl`):
+Criterion 2 is counted from server `duration_ms` (the 10 normal submissions + the forced-timeout submission, which the server still completes). Criterion 5 is checked in `logs/audit.jsonl` (`status: under_review`, `word_count: 6000`, 22:27:16 / :21 / :26).
+
+Real output, trial 3 (`capstone_probe.py::main` → `results/capstone_before.md`):
 
 ```
-TODO
+| bad_missing_text | 400 | 16.5 |
+| bad_json_list | 429 | 17.4 |
+| bad_huge_text | 200 | 384.8 |
+- Requests sent: **20**, records in logs/requests.jsonl for this window: **20**
+- 5xx responses in log: **0** (crash records with error field: 0)
+- /submit 200s: 12 — duration_ms p50 **66.5**, p90 **81.0**, max **378.9**
+- **Compute per /submit (cost): 0.092 s** (mean)
 ```
 
-Diagnosis per miss (stage + mechanism):
+**Diagnosis: criterion 4 (MISSED, 5/7 in trial 3).** In trial 3, `bad_json_list` (a body that's a JSON list) got a **429**, not a 400. The stage is the **rate limiter**, not the route. `rate_limit_key` in `app.py` falls back to the caller's IP address when the body isn't a JSON object, because there's no `creator_id` to read. The probe sends two such requests per trial (`bad_invalid_json`, `bad_json_list`), all from the same IP, so they share one 5-per-minute bucket. Trials run about 5 s apart, so by trial 3 that IP's sixth request in a minute was over the limit. Flask-Limiter runs *before* the route, so the route never got the chance to return its 400. My criterion assumed bad inputs reach the route, but the limiter can answer first.
+
+The 7th bad input (6,000 words) gets a 200 with `under_review` every time. That's by design (criterion 5), which is why my target was 6 of 7.
 
 **The Improvement**
 
+Following the diagnosis: malformed bodies (anything that isn't a JSON object) are now **exempt from the rate limit** (`exempt_when=` on `/submit` in `app.py`). They can't reach the model, and the route refuses them in about 15 ms, so limiting them protects nothing and only replaced a clear 400 with a confusing 429. Well-formed submissions are still limited per creator.
+
+After the fix (`results/capstone_after.md`):
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Every request logged | 20 of 20 | 20/20 | 20/20 | 20/20 | MET |
+| 2. Normal submission under 5 s | 11 of 11 | 11/11 (max 3.64 s) | 11/11 (max 0.34 s) | 11/11 (max 0.35 s) | MET |
+| 3. Compute per check at most 10 s | ≤ 10 s | 0.387 s | 0.092 s | 0.090 s | MET |
+| 4. Bad inputs get a 400 | ≥ 6 of 7 | 6/7 | 6/7 | 6/7 | MET |
+| 5. 6,000 words → under_review | 3 of 3 | under_review | under_review | under_review | MET |
+
+It helped: criterion 4 went from MISSED to MET, and `bad_json_list` returned 400 in all 3 trials. The trade-off: a script sending malformed junk is no longer slowed by the limiter. Each one still costs only about 15 ms and is logged, so it's visible, but it isn't throttled.
+
 **What's Still Broken**
 
+- **Cold start (criterion 2 nearly missed).** In my first, uncommitted run, which I made before writing criteria and then discarded, the first /submit after starting the app took **9.19 s** (`model_ms` 9181): GPT-2 loads on the first request, not at startup. In the after-run, trial 1 (fresh restart) took 3.64 s. Criterion 2 passed, but only because the load was faster that time. What I'd do: warm the model up in `main()` before serving. I stopped because I only had time for one improvement and the 429 was the measured miss.
+- **My targets were set low.** All five criteria now pass, and criterion 3's 10 s is about 100× the measured 0.09 s. I'd tighten criterion 2 to "11 of 11 under 1 s *including the first request after a restart*", which would fail today because of the cold start, and criterion 3 to "under 0.5 s".
+- **The limiter bucket is per IP for anonymous requests.** One household or school network shares one bucket.
+
+**What I'd do next:** move the model load to startup and re-measure the first-request latency. If this ran for real on something like a $20/month server, the cold start would hit a real writer after every deploy or restart, and it's the one number here that actually came close to my limit.
+
 **How I Used AI**
+
+1. TODO (your words): e.g. I asked Claude to add structured logging and a probe to my project. It wrote `capstone_log.py`, the hooks in `app.py`, and `capstone_probe.py`. What I changed or checked: ___
+2. TODO (your words): e.g. I gave Claude rough ideas for criteria. It told me which ones had no number and asked me for targets. I chose 20/20, 5 s, 10 s and 6 of 7. Criterion 5 (the 6,000-word case) was Claude's suggestion. It also caught that my first run happened before my criteria existed, so I discarded it and re-ran.
